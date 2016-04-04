@@ -341,7 +341,12 @@ public final class Project {
 	/// This will fetch dependency repositories as necessary, but will not check
 	/// them out into the project's working directory.
 	public func updatedResolvedCartfile(dependenciesToUpdate: [String]? = nil) -> SignalProducer<ResolvedCartfile, CarthageError> {
-		let resolver = Resolver(versionsForDependency: versionsForProject, cartfileForDependency: cartfileForDependency, resolvedGitReference: resolvedGitReference)
+		let resolver = Resolver(
+			versionsForDependency: versionsForProject,
+			cartfileForDependency: cartfileForDependency,
+			resolvedGitReference: resolvedGitReference,
+			dependenciesToUpdate: dependenciesToUpdate
+		)
 
 		let resolvedCartfile: SignalProducer<ResolvedCartfile?, CarthageError> = loadResolvedCartfile()
 			.map(Optional.init)
@@ -349,7 +354,7 @@ public final class Project {
 
 		return zip(loadCombinedCartfile(), resolvedCartfile)
 			.flatMap(.Merge) { cartfile, resolvedCartfile in
-				return resolver.resolveDependenciesInCartfile(cartfile, lastResolved: resolvedCartfile, dependenciesToUpdate: dependenciesToUpdate)
+				return resolver.resolveDependenciesInCartfile(cartfile, lastResolved: resolvedCartfile)
 			}
 			.collect()
 			.map(ResolvedCartfile.init)

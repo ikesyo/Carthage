@@ -15,6 +15,7 @@ public struct Resolver {
 	private let versionsForDependency: ProjectIdentifier -> SignalProducer<PinnedVersion, CarthageError>
 	private let resolvedGitReference: (ProjectIdentifier, String) -> SignalProducer<PinnedVersion, CarthageError>
 	private let cartfileForDependency: Dependency<PinnedVersion> -> SignalProducer<Cartfile, CarthageError>
+	private let dependenciesFilter: String -> Bool
 
 	/// Instantiates a dependency graph resolver with the given behaviors.
 	///
@@ -24,10 +25,15 @@ public struct Resolver {
 	///                         dependency.
 	/// resolvedGitReference  - Resolves an arbitrary Git reference to the
 	///                         latest object.
-	public init(versionsForDependency: ProjectIdentifier -> SignalProducer<PinnedVersion, CarthageError>, cartfileForDependency: Dependency<PinnedVersion> -> SignalProducer<Cartfile, CarthageError>, resolvedGitReference: (ProjectIdentifier, String) -> SignalProducer<PinnedVersion, CarthageError>) {
+	public init(versionsForDependency: ProjectIdentifier -> SignalProducer<PinnedVersion, CarthageError>, cartfileForDependency: Dependency<PinnedVersion> -> SignalProducer<Cartfile, CarthageError>, resolvedGitReference: (ProjectIdentifier, String) -> SignalProducer<PinnedVersion, CarthageError>, dependenciesToUpdate: [String]? = nil) {
 		self.versionsForDependency = versionsForDependency
 		self.cartfileForDependency = cartfileForDependency
 		self.resolvedGitReference = resolvedGitReference
+		if let dependenciesToUpdate = dependenciesToUpdate where !dependenciesToUpdate.isEmpty {
+			self.dependenciesFilter = { dependenciesToUpdate.contains($0) }
+		} else {
+			self.dependenciesFilter = { _ in true }
+		}
 	}
 
 	/// Attempts to determine the latest valid version to use for each dependency
@@ -35,7 +41,7 @@ public struct Resolver {
 	///
 	/// Sends each recursive dependency with its resolved version, in the order
 	/// that they should be built.
-	public func resolveDependenciesInCartfile(cartfile: Cartfile, lastResolved: ResolvedCartfile? = nil, dependenciesToUpdate: [String]? = nil) -> SignalProducer<Dependency<PinnedVersion>, CarthageError> {
+	public func resolveDependenciesInCartfile(cartfile: Cartfile, lastResolved: ResolvedCartfile? = nil) -> SignalProducer<Dependency<PinnedVersion>, CarthageError> {
 		return graphsForCartfile(cartfile, dependencyOf: nil, basedOnGraph: DependencyGraph())
 			.take(1)
 			.observeOn(QueueScheduler(qos: QOS_CLASS_DEFAULT, name: "org.carthage.CarthageKit.Resolver.resolveDependencesInCartfile"))
@@ -47,24 +53,24 @@ public struct Resolver {
 				let orderedNodesProducer = SignalProducer<DependencyNode, CarthageError>(values: orderedNodes)
 
 				guard
-					let dependenciesToUpdate = dependenciesToUpdate,
-					let lastResolved = lastResolved
-					where !dependenciesToUpdate.isEmpty else {
+//					let dependenciesToUpdate = dependenciesToUpdate,
+					let lastResolved = lastResolved else {
+//					where !dependenciesToUpdate.isEmpty else {
 					// All the dependencies are affected.
 					return orderedNodesProducer.map { node in node.dependencyVersion }
 				}
 
 				// When target dependencies are specified
 				return orderedNodesProducer.map { node -> Dependency<PinnedVersion>? in
-					// A dependency included in the targets should be affected.
-					if dependenciesToUpdate.contains(node.project.name) {
-						return node.dependencyVersion
-					}
-
-					// Nested dependencies of the targets should also be affected.
-					if graph.dependencies(dependenciesToUpdate, containsNestedDependencyOfNode: node) {
-						return node.dependencyVersion
-					}
+//					// A dependency included in the targets should be affected.
+//					if dependenciesToUpdate.contains(node.project.name) {
+//						return node.dependencyVersion
+//					}
+//
+//					// Nested dependencies of the targets should also be affected.
+//					if graph.dependencies(dependenciesToUpdate, containsNestedDependencyOfNode: node) {
+//						return node.dependencyVersion
+//					}
 
 					// The dependencies which are not related to the targets
 					// should not be affected, so use the version in the last
@@ -91,7 +97,7 @@ public struct Resolver {
 	private func nodePermutationsForCartfile(cartfile: Cartfile) -> SignalProducer<[DependencyNode], CarthageError> {
 		let scheduler = QueueScheduler(qos: QOS_CLASS_DEFAULT, name: "org.carthage.CarthageKit.Resolver.nodePermutationsForCartfile")
 
-		return SignalProducer(values: cartfile.dependencies)
+		return SignalProducer(values: cartfile.dependencies.filter { dependenciesFilter($0.project.name) })
 			.map { dependency -> SignalProducer<DependencyNode, CarthageError> in
 				return SignalProducer(value: dependency)
 					.flatMap(.Concat) { dependency -> SignalProducer<PinnedVersion, CarthageError> in
