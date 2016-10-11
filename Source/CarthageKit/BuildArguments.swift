@@ -64,18 +64,6 @@ public struct BuildArguments {
 			args += [ "-derivedDataPath", standarizedPath ]
 		}
 
-		if let sdk = sdk {
-			// Passing in -sdk macosx appears to break implicit dependency
-			// resolution (see Carthage/Carthage#347).
-			//
-			// Since we wouldn't be trying to build this target unless it were
-			// for OS X already, just let xcodebuild figure out the SDK on its
-			// own.
-			if sdk != .MacOSX {
-				args += [ "-sdk", sdk.rawValue ]
-			}
-		}
-		
 		if let toolchain = toolchain {
 			args += [ "-toolchain", toolchain ]
 		}
@@ -86,6 +74,12 @@ public struct BuildArguments {
 
 		if let destinationTimeout = destinationTimeout {
 			args += [ "-destination-timeout", String(destinationTimeout) ]
+		}
+
+		if let sdk = sdk {
+			// Override `SDKROOT` build setting instead of passing in `-sdk`
+			// flag (see Carthage/Carthage#347 and Carthage/Carthage#1513).
+			args += [ "SDKROOT=\(sdk.rawValue)" ]
 		}
 
 		if let onlyActiveArchitecture = onlyActiveArchitecture {

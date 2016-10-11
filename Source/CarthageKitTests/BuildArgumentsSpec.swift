@@ -65,20 +65,10 @@ class BuildArgumentsSpec: QuickSpec {
 			}
 
 			describe("specifying the sdk") {
-				for sdk in SDK.allSDKs.subtract([.MacOSX]) {
-					itCreatesBuildArguments("includes \(sdk) in the argument if specified", arguments: ["-sdk", sdk.rawValue]) { (inout subject: BuildArguments) in
+				for sdk in SDK.allSDKs {
+					itCreatesBuildArguments("includes \(sdk) in the argument if specified", arguments: ["SDKROOT=\(sdk.rawValue)"]) { (inout subject: BuildArguments) in
 						subject.sdk = sdk
 					}
-				}
-
-				// Passing in -sdk macosx appears to break implicit dependency
-				// resolution (see Carthage/Carthage#347).
-				//
-				// Since we wouldn't be trying to build this target unless it were
-				// for OS X already, just let xcodebuild figure out the SDK on its
-				// own.
-				itCreatesBuildArguments("does not include the sdk flag if .MacOSX is specified", arguments: []) { (inout subject: BuildArguments) in
-					subject.sdk = .MacOSX
 				}
 			}
 
